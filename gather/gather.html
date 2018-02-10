@@ -136,10 +136,8 @@ if(!require(XML)) {
 <div id="gathering-data" class="section level1">
 <h1>Gathering Data</h1>
 <p>We want to gather text data from different resources. We prefer gathering the data using APIs instead of using web scrapping to have consistency in the data produced. Some of the APIs have random results. Some have constant results.</p>
-<div id="resources" class="section level2">
-<h2>Resources</h2>
-<div id="wikipedia" class="section level3">
-<h3>Wikipedia</h3>
+<div id="wikipedia" class="section level2">
+<h2>Wikipedia</h2>
 <p>We use wikipedia as a resource. To gather data from Wikipedia we input a title for an article and then get the related articles for that article recursively.<br />
 Documentation for the API can be found here: <a href="https://www.mediawiki.org/api/rest_v1/">MediaPedia REST Documentation</a><br />
 For getting data from Wikipedia, we have the method called <strong>getWikipediaSummaries</strong> which takes two parameters:</p>
@@ -192,8 +190,8 @@ For getting data from Wikipedia, we have the method called <strong>getWikipediaS
   
   return(wikipediaSummaries)
 }</code></pre>
-<div id="getwikipediasummaries-in-depth" class="section level4">
-<h4>getWikipediaSummaries in depth</h4>
+<div id="getwikipediasummaries-in-depth" class="section level3">
+<h3>getWikipediaSummaries in depth</h3>
 <p>We start with the starting title. <em>githubTitlesVector</em> is where we store it and all the related titles.<br />
 <em>isUniqueTitle</em> is a helper method to make sure that we only store unique values.</p>
 <pre class="r"><code>githubTitlesVector = c(startingTitle)
@@ -244,15 +242,15 @@ This while loop finished when we have at least <em>minimumCount</em> titles in <
   
   return(wikipediaSummaries)</code></pre>
 </div>
-<div id="example-use" class="section level4">
-<h4>Example use:</h4>
+<div id="example-use" class="section level3">
+<h3>Example use:</h3>
 <pre class="r"><code>wikipediaSummaries = getWikipediaSummaries(1, &quot;Swift_(programming_language)&quot;)  </code></pre>
 <pre class="r"><code>wikipediaSummaries</code></pre>
 <pre><code>## [1] &quot;Swift is a general-purpose, multi-paradigm, compiled programming language developed by Apple Inc. for iOS, macOS, watchOS, tvOS, and Linux. Swift is designed to work with Apple's Cocoa and Cocoa Touch frameworks and the large body of existing Objective-C (ObjC) code written for Apple products. It is built with the open source LLVM compiler framework and has been included in Xcode since version 6. On platforms other than Linux, it uses the Objective-C runtime library which allows C, Objective-C, C++ and Swift code to run within one program.\nApple intended Swift to support many core concepts associated with Objective-C, notably dynamic dispatch, widespread late binding, extensible programming and similar features, but \&quot;safer\&quot; (easier to catch software bugs); Swift has features addressing some common programming errors like null pointers and provides syntactic sugar to help avoid the pyramid of doom.&quot;</code></pre>
 </div>
 </div>
-<div id="pokemon-abilities" class="section level3">
-<h3>Pokemon Abilities</h3>
+<div id="pokemon-abilities" class="section level2">
+<h2>Pokemon Abilities</h2>
 <p>We use pokemontcg.io as a resource for pokemon ability descriptions.<br />
 The api is paginated so we go through the pages until we have enough descriptions. Documentation for the API can be found here: <a href="https://docs.pokemontcg.io">Pokemon TCG Developers</a><br />
 For getting data, we have the method called <strong>getPokemonAbilities</strong> which takes one parameter:</p>
@@ -280,8 +278,8 @@ For getting data, we have the method called <strong>getPokemonAbilities</strong>
   }
   return(pokemonAbilities)
 }</code></pre>
-<div id="getpokemonabilities-in-depth" class="section level4">
-<h4>getPokemonAbilities in depth</h4>
+<div id="getpokemonabilities-in-depth" class="section level3">
+<h3>getPokemonAbilities in depth</h3>
 <p><em>pokemonAbilities</em> holds the abilities we got from the server. <em>morePagesAvailable</em> is a flag to know if there are more pages in the api.</p>
 <pre class="r"><code>  pokemonAbilities = c()
   morePagesAvailable = TRUE</code></pre>
@@ -307,8 +305,8 @@ If we requested a certain number of abilities and got less than that number, we 
 <p>Once the while loop is finished we return the vector of pokemon abilities.</p>
 <pre class="r"><code>  return(pokemonAbilities)</code></pre>
 </div>
-<div id="example-use-1" class="section level4">
-<h4>Example use:</h4>
+<div id="example-use-1" class="section level3">
+<h3>Example use:</h3>
 <pre class="r"><code>pokemonAbilities = getPokemonAbilities(5)</code></pre>
 <pre class="r"><code>pokemonAbilities</code></pre>
 <pre><code>## [1] &quot;As often as you like during your turn (before your attack), you may attach 1 Water Energy Card to 1 of your Water Pokémon. (This doesn't use up your 1 Energy card attachment for the turn.) This power can't be used if Blastoise is Asleep, Confused, or Paralyzed.&quot;    
@@ -317,6 +315,85 @@ If we requested a certain number of abilities and got less than that number, we 
 ## [4] &quot;All Energy cards attached to Erika's Oddish provide Grass Energy instead of their usual type. This power works even while Erika's Oddish is Asleep, Confused, or Paralyzed.&quot;                                                                                              
 ## [5] &quot;Once during your turn (before your attack), you may remove 1 damage counter from Blaine's Vulpix. This power can't be used if Blaine's Vulpix is Asleep, Confused, or Paralyzed.&quot;</code></pre>
 </div>
+</div>
+<div id="trivia-facts" class="section level2">
+<h2>Trivia facts</h2>
+<p>We use opentdb.com as a resource for trivia facts.<br />
+This is the only api that is random out of the three. To get the number of facts we need, we call the api again and again and gather unique facts until we reach the number.<br />
+Since this is a trivia questions db, we can get both true and false facts so we filter them after getting them from the server so we only save the facts with a “true” correct answer.<br />
+Documentation for the API can be found here: <a href="https://opentdb.com/api_config.php">Open Trivia DB API</a><br />
+For getting data, we have the method called <strong>getTriviaFacts</strong> which takes one parameter:</p>
+<ol style="list-style-type: decimal">
+<li><strong>minimumCount</strong> - The minimum number of facts we need.</li>
+</ol>
+<pre class="r"><code>getTriviaFacts = function(minimumCount) {
+  html2txt &lt;- function(str) {
+    xpathApply(htmlParse(str, asText=TRUE),
+               &quot;//body//text()&quot;, 
+               xmlValue)[[1]] 
+  }
+  
+  triviaFacts = c()
+  
+  isUniqueFact = function(fact) {
+    return(fact %in% triviaFacts == FALSE)
+  }
+  
+  while (length(triviaFacts) &lt; minimumCount) {
+    pageSize = min(50, minimumCount)
+    pageSizeQueryParam = paste0(&quot;&amp;amount=&quot;, toString(pageSize))
+    apiURL = paste0(&quot;https://opentdb.com/api.php?difficulty=hard&amp;type=boolean&quot;, pageSizeQueryParam)
+    print(paste0(&quot;Getting facts from: &quot;, apiURL))
+    triviaQuestions = fromJSON(apiURL)$results
+    triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == &quot;True&quot;, ]$question
+    uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
+    triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
+  }
+  
+  triviaFacts = unlist(lapply(triviaFacts, html2txt))
+  return(triviaFacts)
+}</code></pre>
+<div id="gettriviafacts-in-depth" class="section level3">
+<h3>getTriviaFacts in depth</h3>
+<p><em>html2txt</em> is a helper method to decode HTML encoding which is the encoding for the questions in this api.</p>
+<pre class="r"><code>html2txt &lt;- function(str) {
+  xpathApply(htmlParse(str, asText=TRUE),
+             &quot;//body//text()&quot;, 
+             xmlValue)[[1]] 
+}</code></pre>
+<p><em>triviaFacts</em> is the vector in which we store fetched facts. To make sure that we don’t store the same fact twice since this is a random api, we have the <em>isUniqueFact</em> helper method.</p>
+<pre class="r"><code>triviaFacts = c()
+
+isUniqueFact = function(fact) {
+  return(fact %in% triviaFacts == FALSE)
+}</code></pre>
+<p>The main while loop runs until we have enough facts.<br />
+It first fetches questions and answers with only boolean answers from the api. After that, it filters the questions with a “True” result which is considered as a fact from now on.<br />
+After that, the answers are filtered to make sure that we only have unique facts and appened to <em>triviaFacts</em></p>
+<pre class="r"><code>while (length(triviaFacts) &lt; minimumCount) {
+  pageSize = min(50, minimumCount)
+  pageSizeQueryParam = paste0(&quot;&amp;amount=&quot;, toString(pageSize))
+  apiURL = paste0(&quot;https://opentdb.com/api.php?difficulty=hard&amp;type=boolean&quot;, pageSizeQueryParam)
+  print(paste0(&quot;Getting facts from: &quot;, apiURL))
+  triviaQuestions = fromJSON(apiURL)$results
+  triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == &quot;True&quot;, ]$question
+  uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
+  triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
+}</code></pre>
+<p>The facts are decoded using <em>html2txt</em> and returned.</p>
+<pre class="r"><code>triviaFacts = unlist(lapply(triviaFacts, html2txt))
+return(triviaFacts)</code></pre>
+</div>
+<div id="example-use-2" class="section level3">
+<h3>Example use:</h3>
+<pre class="r"><code>triviaFacts = getTriviaFacts(5)</code></pre>
+<pre class="r"><code>triviaFacts</code></pre>
+<pre><code>## [1] &quot;Unturned originally started as a Roblox game.&quot;                                             
+## [2] &quot;In Scandinavian languages, the letter Å means river.&quot;                                      
+## [3] &quot;Joko Widodo has appeared in the cover of a TIME magazine.&quot;                                 
+## [4] &quot;The Klingon home planet is Qo'noS.&quot;                                                        
+## [5] &quot;In \&quot;The Sims\&quot; series, the most members in a household you can have is 8.&quot;                
+## [6] &quot;The song \&quot;Mystery Train\&quot; was released by artist \&quot;Little Junior's Blue Flames\&quot; in 1953.&quot;</code></pre>
 </div>
 </div>
 </div>

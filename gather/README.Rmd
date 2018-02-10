@@ -24,8 +24,7 @@ We want to gather text data from different resources.
 We prefer gathering the data using APIs instead of using web scrapping to have consistency in the data produced.
 Some of the APIs have random results. Some have constant results.
 
-## Resources
-### Wikipedia
+## Wikipedia
 We use wikipedia as a resource. To gather data from Wikipedia we input a title for an article and then get the related articles for that article recursively.  
 Documentation for the API can be found here: [MediaPedia REST Documentation](https://www.mediawiki.org/api/rest_v1/)  
 For getting data from Wikipedia, we have the method called **getWikipediaSummaries** which takes two parameters:
@@ -81,7 +80,7 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
 }
 ```
 
-#### getWikipediaSummaries in depth
+### getWikipediaSummaries in depth
 We start with the starting title. *githubTitlesVector* is where we store it and all the related titles.  
 *isUniqueTitle* is a helper method to make sure that we only store unique values.
 ```{r, eval=FALSE}
@@ -150,7 +149,7 @@ We map each title to its summary using *safeGetWikipediaSummary* and return it.
   return(wikipediaSummaries)
 ```
 
-#### Example use:
+### Example use:
 ```{r results='hide', message=FALSE, warning=FALSE}
 wikipediaSummaries = getWikipediaSummaries(1, "Swift_(programming_language)")  
 ```
@@ -158,7 +157,7 @@ wikipediaSummaries = getWikipediaSummaries(1, "Swift_(programming_language)")
 wikipediaSummaries
 ```
 
-### Pokemon Abilities
+## Pokemon Abilities
 We use pokemontcg.io as a resource for pokemon ability descriptions.  
 The api is paginated so we go through the pages until we have enough descriptions.
 Documentation for the API can be found here: [Pokemon TCG Developers](https://docs.pokemontcg.io)  
@@ -190,7 +189,7 @@ getPokemonAbilities = function(minimumCount) {
 }
 ```
 
-#### getPokemonAbilities in depth
+### getPokemonAbilities in depth
 
 *pokemonAbilities* holds the abilities we got from the server.
 *morePagesAvailable* is a flag to know if there are more pages in the api.
@@ -226,10 +225,98 @@ Once the while loop is finished we return the vector of pokemon abilities.
   return(pokemonAbilities)
 ```
 
-#### Example use:
+### Example use:
 ```{r results='hide', message=FALSE, warning=FALSE}
 pokemonAbilities = getPokemonAbilities(5)
 ```
 ```{r}
 pokemonAbilities
+```
+
+## Trivia facts
+We use opentdb.com as a resource for trivia facts.  
+This is the only api that is random out of the three. To get the number of facts we need, we call the api again and again and gather unique facts until we reach the number.  
+Since this is a trivia questions db, we can get both true and false facts so we filter them after getting them from the server so we only save the facts with a "true" correct answer.  
+Documentation for the API can be found here: [Open Trivia DB API](https://opentdb.com/api_config.php)  
+For getting data, we have the method called **getTriviaFacts** which takes one parameter:
+
+1. **minimumCount** - The minimum number of facts we need.
+
+```{r}
+getTriviaFacts = function(minimumCount) {
+  html2txt <- function(str) {
+    xpathApply(htmlParse(str, asText=TRUE),
+               "//body//text()", 
+               xmlValue)[[1]] 
+  }
+  
+  triviaFacts = c()
+  
+  isUniqueFact = function(fact) {
+    return(fact %in% triviaFacts == FALSE)
+  }
+  
+  while (length(triviaFacts) < minimumCount) {
+    pageSize = min(50, minimumCount)
+    pageSizeQueryParam = paste0("&amount=", toString(pageSize))
+    apiURL = paste0("https://opentdb.com/api.php?difficulty=hard&type=boolean", pageSizeQueryParam)
+    print(paste0("Getting facts from: ", apiURL))
+    triviaQuestions = fromJSON(apiURL)$results
+    triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]$question
+    uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
+    triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
+  }
+  
+  triviaFacts = unlist(lapply(triviaFacts, html2txt))
+  return(triviaFacts)
+}
+```
+
+### getTriviaFacts in depth
+*html2txt* is a helper method to decode HTML encoding which is the encoding for the questions in this api.
+```{r, eval=FALSE}
+html2txt <- function(str) {
+  xpathApply(htmlParse(str, asText=TRUE),
+             "//body//text()", 
+             xmlValue)[[1]] 
+}
+```
+
+*triviaFacts* is the vector in which we store fetched facts. To make sure that we don't store the same fact twice since this is a random api, we have the *isUniqueFact* helper method.
+```{r, eval=FALSE}
+triviaFacts = c()
+
+isUniqueFact = function(fact) {
+  return(fact %in% triviaFacts == FALSE)
+}
+```
+
+The main while loop runs until we have enough facts.  
+It first fetches questions and answers with only boolean answers from the api. After that, it filters the questions with a "True" result which is considered as a fact from now on.  
+After that, the answers are filtered to make sure that we only have unique facts and appened to *triviaFacts*
+```{r, eval=FALSE}
+while (length(triviaFacts) < minimumCount) {
+  pageSize = min(50, minimumCount)
+  pageSizeQueryParam = paste0("&amount=", toString(pageSize))
+  apiURL = paste0("https://opentdb.com/api.php?difficulty=hard&type=boolean", pageSizeQueryParam)
+  print(paste0("Getting facts from: ", apiURL))
+  triviaQuestions = fromJSON(apiURL)$results
+  triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]$question
+  uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
+  triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
+}
+```
+
+The facts are decoded using *html2txt* and returned.
+```{r, eval=FALSE}
+triviaFacts = unlist(lapply(triviaFacts, html2txt))
+return(triviaFacts)
+```
+
+### Example use:
+```{r results='hide', message=FALSE, warning=FALSE}
+triviaFacts = getTriviaFacts(5)
+```
+```{r}
+triviaFacts
 ```

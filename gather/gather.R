@@ -90,7 +90,9 @@ getTriviaFacts = function(minimumCount) {
   }
   
   while (length(triviaFacts) < minimumCount) {
-    apiURL = "https://opentdb.com/api.php?amount=50&difficulty=hard&type=boolean"
+    pageSize = min(50, minimumCount)
+    pageSizeQueryParam = paste0("&amount=", toString(pageSize))
+    apiURL = paste0("https://opentdb.com/api.php?difficulty=hard&type=boolean", pageSizeQueryParam)
     print(paste0("Getting facts from: ", apiURL))
     triviaQuestions = fromJSON(apiURL)$results
     triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]$question
