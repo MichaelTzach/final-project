@@ -2,6 +2,29 @@ if(!require(jsonlite)) {
   install.packages('jsonlite')
 }
 library(jsonlite)
+if(!require(XML)) {
+  install.packages('XML')
+}
+library(XML)
+
+getTriviaFacts = function(minimumCount) {
+  html2txt <- function(str) {
+    xpathApply(htmlParse(str, asText=TRUE),
+               "//body//text()", 
+               xmlValue)[[1]] 
+  }
+  
+  triviaFacts = c()
+  
+  while (length(triviaFacts) < minimumCount) {
+    triviaQuestions = fromJSON("https://opentdb.com/api.php?amount=50&difficulty=hard&type=boolean")$results
+    triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]
+    triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers$question)  
+  }
+  
+  triviaFacts = unlist(lapply(triviaFacts, html2txt))
+  return(triviaFacts)
+}
 
 getWikipediaSummaries = function(minimumCount, startingTitle) {
   githubTitlesVector = c(startingTitle)
@@ -32,6 +55,6 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
 }
 
 wikipediaSummaries = getWikipediaSummaries(50, "Swift_(programming_language)")  
-
+triviaFacts = getTriviaFacts(50)
 
 
