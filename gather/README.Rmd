@@ -7,6 +7,12 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+***
+
+<center><h2><a href="http://htmlpreview.github.io/?https://github.com/MichaelTzach/final-project/blob/master/gather/README.html">HTML PREVIEW</a> </h2></center>
+
+***
+
 Import the needed libraries
 ```{r}
 if(!require(jsonlite)) {
