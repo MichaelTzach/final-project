@@ -1,0 +1,235 @@
+---
+title: "Gather text resources"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Import the needed libraries
+```{r}
+if(!require(jsonlite)) {
+  install.packages('jsonlite')
+}
+library(jsonlite)
+if(!require(XML)) {
+  install.packages('XML')
+}
+library(XML)
+```
+
+# Gathering Data
+We want to gather text data from different resources.
+We prefer gathering the data using APIs instead of using web scrapping to have consistency in the data produced.
+Some of the APIs have random results. Some have constant results.
+
+## Resources
+### Wikipedia
+We use wikipedia as a resource. To gather data from Wikipedia we input a title for an article and then get the related articles for that article recursively.  
+Documentation for the API can be found here: [MediaPedia REST Documentation](https://www.mediawiki.org/api/rest_v1/)  
+For getting data from Wikipedia, we have the method called **getWikipediaSummaries** which takes two parameters:
+
+1. **minimumCount** - The minimum number of wikipedia entry summeries we need
+2. **startingTitle** - The initial title we want the related articles to be from. You can choose any title and the results will be related to that title.
+
+```{r}
+getWikipediaSummaries = function(minimumCount, startingTitle) {
+  githubTitlesVector = c(startingTitle)
+  isUniqueTitle = function(title) {
+    return(title %in% githubTitlesVector == FALSE)
+  }
+  
+  relatedSitesAlreadyQueried = c()
+  didNotGetRelatedTitlesForTitle = function(title) {
+    return(title %in% relatedSitesAlreadyQueried == FALSE)
+  }
+  
+  getRelatedTitlesToTitlesList = function(title) {
+    relatedSitesAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/related/", title)
+    print(paste0("Getting related Wikipedia titles from: ", relatedSitesAPIURL))
+    relatedTitles = fromJSON(relatedSitesAPIURL)$pages$title
+    return(relatedTitles)
+  }
+  getWikipediaSummary = function(title) {
+    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
+    print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
+    summaryJSON = fromJSON(summaryAPIURL)
+    return(unlist(summaryJSON$extract))
+  }
+  
+  safeGetWikipediaSummary = function(title) {
+    result = tryCatch({
+      getWikipediaSummary(title)
+    }, error = function(e) {
+      c()
+    })
+    return(result)
+  }
+  
+  while (length(githubTitlesVector) < minimumCount) {
+    titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
+    relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
+    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
+    uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
+    githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
+  }
+  
+  wikipediaSummaries = unlist(lapply(githubTitlesVector, safeGetWikipediaSummary))
+  
+  return(wikipediaSummaries)
+}
+```
+
+#### getWikipediaSummaries in depth
+We start with the starting title. *githubTitlesVector* is where we store it and all the related titles.  
+*isUniqueTitle* is a helper method to make sure that we only store unique values.
+```{r, eval=FALSE}
+githubTitlesVector = c(startingTitle)
+isUniqueTitle = function(title) {
+  return(title %in% githubTitlesVector == FALSE)
+}
+```
+
+When we are collecting the related titles recursively, we almost always return to previously visited titles. We store them in *relatedSitesAlreadyQueried* so we don't request for related for them again.
+*didNotGetRelatedTitlesForTitle* is a helper method to get only the titles that were not previously checked.
+```{r, eval=FALSE}
+relatedSitesAlreadyQueried = c()
+didNotGetRelatedTitlesForTitle = function(title) {
+  return(title %in% relatedSitesAlreadyQueried == FALSE)
+}
+```
+
+*getRelatedTitlesToTitlesList* is a helper method that gets a title and returns a vector of related titles to that title.
+```{r, eval=FALSE}
+getRelatedTitlesToTitlesList = function(title) {
+  relatedSitesAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/related/", title)
+  print(paste0("Getting related Wikipedia titles from: ", relatedSitesAPIURL))
+  relatedTitles = fromJSON(relatedSitesAPIURL)$pages$title
+  return(relatedTitles)
+}
+```
+
+*getWikipediaSummary* is a helper method that gets a title and returns the summary for that title. It returns the value for the **extract** key in the json.  
+We wrap this method with *safeGetWikipediaSummary* because it could raise errors.
+```{r, eval=FALSE}
+getWikipediaSummary = function(title) {
+  summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
+  print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
+  summaryJSON = fromJSON(summaryAPIURL)
+  return(unlist(summaryJSON$extract))
+}
+
+safeGetWikipediaSummary = function(title) {
+  result = tryCatch({
+    getWikipediaSummary(title)
+  }, error = function(e) {
+    c()
+  })
+  return(result)
+}
+```
+
+The main while loop collects titles using a recursive related search.  
+For each title that we have in *githubTitlesVector* that hasn't yet been searched, we request the related titles and then append the unique ones back to *githubTitlesVector*.  
+This while loop finished when we have at least *minimumCount* titles in *githubTitlesVector*.
+```{r, eval=FALSE}
+while (length(githubTitlesVector) < minimumCount) {
+  titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
+  relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
+  relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
+  uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
+  githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
+}
+```
+
+We map each title to its summary using *safeGetWikipediaSummary* and return it.
+```{r, eval=FALSE}
+  wikipediaSummaries = unlist(lapply(githubTitlesVector, safeGetWikipediaSummary))
+  
+  return(wikipediaSummaries)
+```
+
+#### Example use:
+```{r results='hide', message=FALSE, warning=FALSE}
+wikipediaSummaries = getWikipediaSummaries(1, "Swift_(programming_language)")  
+```
+```{r}
+wikipediaSummaries
+```
+
+### Pokemon Abilities
+We use pokemontcg.io as a resource for pokemon ability descriptions.  
+The api is paginated so we go through the pages until we have enough descriptions.
+Documentation for the API can be found here: [Pokemon TCG Developers](https://docs.pokemontcg.io)  
+For getting data, we have the method called **getPokemonAbilities** which takes one parameter:
+
+1. **minimumCount** - The minimum number of ability summeries we need. The method will attempt to get at least this number but the maximum number is about 170 which is the number of pokemon in the DB.
+
+```{r}
+getPokemonAbilities = function(minimumCount) {
+  pokemonAbilities = c()
+  morePagesAvailable = TRUE
+  while(length(pokemonAbilities) < minimumCount && morePagesAvailable) {
+    pageSize = min(50, minimumCount)
+    page = 1 + length(pokemonAbilities) / pageSize
+    pageSizeQueryParam = paste0("&pageSize=", toString(pageSize))
+    pageQueryParam = paste0("&page=", toString(page))
+    apiURL = "https://api.pokemontcg.io/v1/cards?supertype=Pok%C3%A9mon&abilityType=Pok%C3%A9mon%20Power"
+    apiURL = paste0(apiURL, pageQueryParam)
+    apiURL = paste0(apiURL, pageSizeQueryParam)
+    
+    print(paste0("Getting pokemon abilities from: ", apiURL))
+    pokemonData = fromJSON(apiURL)$cards
+    if (length(pokemonData$ability$text) < pageSize) {
+      morePagesAvailable = FALSE
+    }
+    pokemonAbilities = append(pokemonAbilities, pokemonData$ability$text)
+  }
+  return(pokemonAbilities)
+}
+```
+
+#### getPokemonAbilities in depth
+
+*pokemonAbilities* holds the abilities we got from the server.
+*morePagesAvailable* is a flag to know if there are more pages in the api.
+```{r, eval=FALSE}
+  pokemonAbilities = c()
+  morePagesAvailable = TRUE
+```
+
+The main while loop runs until we get *minimumCount* abilities or until there are no more pages available.  
+It first calculates the apiURL. We only want pokemon that have abilities hence the *abilityType* param query.  
+If we requested a certain number of abilities and got less than that number, we know that there are no more pages available.
+```{r, eval=FALSE}
+  while(length(pokemonAbilities) < minimumCount && morePagesAvailable) {
+    pageSize = min(50, minimumCount)
+    page = 1 + length(pokemonAbilities) / pageSize
+    pageSizeQueryParam = paste0("&pageSize=", toString(pageSize))
+    pageQueryParam = paste0("&page=", toString(page))
+    apiURL = "https://api.pokemontcg.io/v1/cards?supertype=Pok%C3%A9mon&abilityType=Pok%C3%A9mon%20Power"
+    apiURL = paste0(apiURL, pageQueryParam)
+    apiURL = paste0(apiURL, pageSizeQueryParam)
+    
+    print(paste0("Getting pokemon abilities from: ", apiURL))
+    pokemonData = fromJSON(apiURL)$cards
+    if (length(pokemonData$ability$text) < pageSize) {
+      morePagesAvailable = FALSE
+    }
+    pokemonAbilities = append(pokemonAbilities, pokemonData$ability$text)
+  }
+```
+
+Once the while loop is finished we return the vector of pokemon abilities.
+```{r, eval=FALSE}
+  return(pokemonAbilities)
+```
+
+#### Example use:
+```{r results='hide', message=FALSE, warning=FALSE}
+pokemonAbilities = getPokemonAbilities(5)
+```
+```{r}
+pokemonAbilities
+```

@@ -7,11 +7,57 @@ if(!require(XML)) {
 }
 library(XML)
 
+getWikipediaSummaries = function(minimumCount, startingTitle) {
+  githubTitlesVector = c(startingTitle)
+  isUniqueTitle = function(title) {
+    return(title %in% githubTitlesVector == FALSE)
+  }
+  
+  relatedSitesAlreadyQueried = c()
+  didNotGetRelatedTitlesForTitle = function(title) {
+    return(title %in% relatedSitesAlreadyQueried == FALSE)
+  }
+  
+  getRelatedTitlesToTitlesList = function(title) {
+    relatedSitesAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/related/", title)
+    print(paste0("Getting related Wikipedia titles from: ", relatedSitesAPIURL))
+    relatedTitles = fromJSON(relatedSitesAPIURL)$pages$title
+    return(relatedTitles)
+  }
+  getWikipediaSummary = function(title) {
+    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
+    print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
+    summaryJSON = fromJSON(summaryAPIURL)
+    return(unlist(summaryJSON$extract))
+  }
+  
+  safeGetWikipediaSummary = function(title) {
+    result = tryCatch({
+      getWikipediaSummary(title)
+    }, error = function(e) {
+      c()
+    })
+    return(result)
+  }
+  
+  while (length(githubTitlesVector) < minimumCount) {
+    titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
+    relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
+    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
+    uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
+    githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
+  }
+  
+  wikipediaSummaries = unlist(lapply(githubTitlesVector, safeGetWikipediaSummary))
+  
+  return(wikipediaSummaries)
+}
+
 getPokemonAbilities = function(minimumCount) {
   pokemonAbilities = c()
   morePagesAvailable = TRUE
   while(length(pokemonAbilities) < minimumCount && morePagesAvailable) {
-    pageSize = 50
+    pageSize = min(50, minimumCount)
     page = 1 + length(pokemonAbilities) / pageSize
     pageSizeQueryParam = paste0("&pageSize=", toString(pageSize))
     pageQueryParam = paste0("&page=", toString(page))
@@ -56,54 +102,11 @@ getTriviaFacts = function(minimumCount) {
   return(triviaFacts)
 }
 
-getWikipediaSummaries = function(minimumCount, startingTitle) {
-  githubTitlesVector = c(startingTitle)
-  isUniqueTitle = function(title) {
-    return(title %in% githubTitlesVector == FALSE)
-  }
-  
-  relatedSitesAlreadyQueried = c()
-  didNotGetRelatedTitlesForTitle = function(title) {
-    return(title %in% relatedSitesAlreadyQueried == FALSE)
-  }
-  
-  getRelatedTitlesToTitlesList = function(title) {
-    relatedSitesAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/related/", title)
-    print(paste0("Getting related Wikipedia titles from: ", relatedSitesAPIURL))
-    relatedTitles = fromJSON(relatedSitesAPIURL)$pages$title
-    return(relatedTitles)
-  }
-  getWikipediaSummary = function(title) {
-    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
-    print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
-    summaryJSON = fromJSON(summaryAPIURL)
-    return(unlist(summaryJSON$extract))
-  }
-  
-  safeGetWikipediaSummary = function(title) {
-    result = tryCatch({
-      getWikipediaSummary(title)
-    }, error = function(e) {
-      c()
-    })
-    return(result)
-  }
-  
-  while (length(githubTitlesVector) < minimumCount) {
-    titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
-    relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
-    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
-    uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
-    githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
-  }
 
-  wikipediaSummaries = unlist(lapply(githubTitlesVector, safeGetWikipediaSummary))
-  
-  return(wikipediaSummaries)
-}
 
 wikipediaSummaries = getWikipediaSummaries(150, "Swift_(programming_language)")  
-triviaFacts = getTriviaFacts(150)
 pokemonAbilities = getPokemonAbilities(150)
+triviaFacts = getTriviaFacts(150)
+
 
 
