@@ -104,11 +104,11 @@ getTriviaFacts = function(minimumCount) {
   return(triviaFacts)
 }
 
+wikipediaSummaries = getWikipediaSummaries(100, "Swift_(programming_language)")  
+pokemonAbilities = getPokemonAbilities(100)
+triviaFacts = getTriviaFacts(100)
 
-
-wikipediaSummaries = getWikipediaSummaries(150, "Swift_(programming_language)")  
-pokemonAbilities = getPokemonAbilities(150)
-triviaFacts = getTriviaFacts(150)
-
-
+write.csv(wikipediaSummaries, "wikipediaSummaries.csv")
+write.csv(pokemonAbilities, "pokemonAbilities.csv")
+write.csv(triviaFacts, "triviaFacts.csv")
 
