@@ -118,9 +118,36 @@ getBBCArticls = function(minimumCount) {
   
   return(bbcArticls)
 }
-wikipediaSummaries = getWikipediaSummaries(100, "Swift_(programming_language)")  
-pokemonAbilities = getPokemonAbilities(100)
-bbcArticls = getBBCArticls()
+
+getTripAdvisorBlogPosts = function(minimumCount) {
+  getBlogPostURLs = function() {
+    travalStoriesListJSONURL = paste0("https://www.tripadvisor.com/blog/api/posts/?locale=en&posts_per_page=", toString(minimumCount * 3))
+    print(paste0("Getting blog post URLs from: ", travalStoriesListJSONURL))
+    travalStoriesListJSON = fromJSON(travalStoriesListJSONURL)
+    travelBlogURLs = travalStoriesListJSON$data$posts$link
+    return(travelBlogURLs)
+  }
+  getBlogPostContent = function(blogpostURL) {
+    print(paste0("Getting blog post from: ", blogpostURL))
+    html = GET(blogpostURL)
+    document = htmlParse(html, asText = TRUE)
+    plainText = xpathSApply(document, "//div[@class='ec__post-body']/p",xmlValue)
+    plainText = paste(plainText, collapse = "\n")
+    return(plainText)
+  }
+
+  blogPostURLs = getBlogPostURLs()
+  blogPosts = unlist(lapply(blogPostURLs, getBlogPostContent))
+  blogPosts = rev(blogPosts[order(nchar(blogPosts))])
+  blogPosts = head(blogPosts, minimumCount)
+
+  return(blogPosts)
+}
+
+wikipediaSummaries = getWikipediaSummaries(50, "Swift_(programming_language)")  
+tripAdvisorBlogPosts = getTripAdvisorBlogPosts(50)
+bbcArticls = getBBCArticls(50)
 
 write.csv(wikipediaSummaries, 'wikipediaSummaries.csv')
+write.csv(tripAdvisorBlogPosts, 'tripAdvisorBlogPosts.csv')
 write.csv(bbcArticls, 'bbcArticls.csv')

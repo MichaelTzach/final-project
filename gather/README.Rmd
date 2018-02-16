@@ -185,80 +185,81 @@ wikipediaSummaries = getWikipediaSummaries(1, "Swift_(programming_language)")
 wikipediaSummaries
 ```
 
-## Pokemon Abilities
-We use pokemontcg.io as a resource for pokemon ability descriptions.  
-The api is paginated so we go through the pages until we have enough descriptions.
-Documentation for the API can be found here: [Pokemon TCG Developers](https://docs.pokemontcg.io)  
-For getting data, we have the method called **getPokemonAbilities** which takes one parameter:
+## Trip advisor blogs
+We use trip advisor blogs as another source of data. We use an unpublished api that returns links to blogs posts in trip advisor. This api is the api used by the site for paginating the list of blog posts shown there.  
+For getting data, we have the method called **getTripAdvisorBlogPosts** which takes one parameter:
 
-1. **minimumCount** - The minimum number of ability summeries we need. The method will attempt to get at least this number but the maximum number is about 170 which is the number of pokemon in the DB.
+1. **minimumCount** - The minimum number of blog posts that we want. The function will download three times that number and will return the longest *minimumCount* blog posts it found.
 
 ```{r}
-getPokemonAbilities = function(minimumCount) {
-  pokemonAbilities = c()
-  morePagesAvailable = TRUE
-  while(length(pokemonAbilities) < minimumCount && morePagesAvailable) {
-    pageSize = min(50, minimumCount)
-    page = 1 + length(pokemonAbilities) / pageSize
-    pageSizeQueryParam = paste0("&pageSize=", toString(pageSize))
-    pageQueryParam = paste0("&page=", toString(page))
-    apiURL = "https://api.pokemontcg.io/v1/cards?supertype=Pok%C3%A9mon&abilityType=Pok%C3%A9mon%20Power"
-    apiURL = paste0(apiURL, pageQueryParam)
-    apiURL = paste0(apiURL, pageSizeQueryParam)
-    
-    print(paste0("Getting pokemon abilities from: ", apiURL))
-    pokemonData = fromJSON(apiURL)$cards
-    if (length(pokemonData$ability$text) < pageSize) {
-      morePagesAvailable = FALSE
-    }
-    pokemonAbilities = append(pokemonAbilities, pokemonData$ability$text)
+getTripAdvisorBlogPosts = function(minimumCount) {
+  getBlogPostURLs = function() {
+    travalStoriesListJSONURL = paste0("https://www.tripadvisor.com/blog/api/posts/?locale=en&posts_per_page=", toString(minimumCount * 3))
+    print(paste0("Getting blog post URLs from: ", travalStoriesListJSONURL))
+    travalStoriesListJSON = fromJSON(travalStoriesListJSONURL)
+    travelBlogURLs = travalStoriesListJSON$data$posts$link
+    return(travelBlogURLs)
   }
-  return(pokemonAbilities)
+  getBlogPostContent = function(blogpostURL) {
+    print(paste0("Getting blog post from: ", blogpostURL))
+    html = GET(blogpostURL)
+    document = htmlParse(html, asText = TRUE)
+    plainText = xpathSApply(document, "//div[@class='ec__post-body']/p",xmlValue)
+    plainText = paste(plainText, collapse = "\n")
+    return(plainText)
+  }
+
+  blogPostURLs = getBlogPostURLs()
+  blogPosts = unlist(lapply(blogPostURLs, getBlogPostContent))
+  blogPosts = rev(blogPosts[order(nchar(blogPosts))])
+  blogPosts = head(blogPosts, minimumCount)
+
+  return(blogPosts)
 }
 ```
 
-### getPokemonAbilities in depth
+### getTripAdvisorBlogPosts in depth
 
-*pokemonAbilities* holds the abilities we got from the server.
-*morePagesAvailable* is a flag to know if there are more pages in the api.
+*getBlogPostURLs* is a helper method that returns blog post links three times the number of minimum blog posts we need.  
+It does so by downloading from trip advisor's undocumented api and then taking the links from the JSON returned.
 ```{r, eval=FALSE}
-  pokemonAbilities = c()
-  morePagesAvailable = TRUE
+getBlogPostURLs = function() {
+  travalStoriesListJSONURL = paste0("https://www.tripadvisor.com/blog/api/posts/?locale=en&posts_per_page=", toString(minimumCount * 3))
+  print(paste0("Getting blog post URLs from: ", travalStoriesListJSONURL))
+  travalStoriesListJSON = fromJSON(travalStoriesListJSONURL)
+  travelBlogURLs = travalStoriesListJSON$data$posts$link
+  return(travelBlogURLs)
+}
 ```
 
-The main while loop runs until we get *minimumCount* abilities or until there are no more pages available.  
-It first calculates the apiURL. We only want pokemon that have abilities hence the *abilityType* param query.  
-If we requested a certain number of abilities and got less than that number, we know that there are no more pages available.
+*getBlogPostContent* is another helper method that takes a single blog post link as a parameter and then downloads it and parses the HTML.  
+Once the HTML is parsed, we take all <p> tags that sit under <div> tags that have the 'ec__post-body' class which is the class for the blog post.  
 ```{r, eval=FALSE}
-  while(length(pokemonAbilities) < minimumCount && morePagesAvailable) {
-    pageSize = min(50, minimumCount)
-    page = 1 + length(pokemonAbilities) / pageSize
-    pageSizeQueryParam = paste0("&pageSize=", toString(pageSize))
-    pageQueryParam = paste0("&page=", toString(page))
-    apiURL = "https://api.pokemontcg.io/v1/cards?supertype=Pok%C3%A9mon&abilityType=Pok%C3%A9mon%20Power"
-    apiURL = paste0(apiURL, pageQueryParam)
-    apiURL = paste0(apiURL, pageSizeQueryParam)
-    
-    print(paste0("Getting pokemon abilities from: ", apiURL))
-    pokemonData = fromJSON(apiURL)$cards
-    if (length(pokemonData$ability$text) < pageSize) {
-      morePagesAvailable = FALSE
-    }
-    pokemonAbilities = append(pokemonAbilities, pokemonData$ability$text)
-  }
+getBlogPostContent = function(blogpostURL) {
+  print(paste0("Getting blog post from: ", blogpostURL))
+  html = GET(blogpostURL)
+  document = htmlParse(html, asText = TRUE)
+  plainText = xpathSApply(document, "//div[@class='ec__post-body']/p",xmlValue)
+  plainText = paste(plainText, collapse = "\n")
+  return(plainText)
+}
 ```
 
-Once the while loop is finished we return the vector of pokemon abilities.
+Once the function runs, it first creates a var with the blog posts urls *blogPostURLs*.  
+After that it downloads each blog post and reverse sorts it by blog post length. Once it is sorted, we return the longest *minimumCount* blog posts.
 ```{r, eval=FALSE}
-  return(pokemonAbilities)
+blogPostURLs = getBlogPostURLs()
+blogPosts = unlist(lapply(blogPostURLs, getBlogPostContent))
+blogPosts = rev(blogPosts[order(nchar(blogPosts))])
+blogPosts = head(blogPosts, minimumCount)
 ```
 
 ### Example use:
 ```{r results='hide', message=FALSE, warning=FALSE}
-pokemonAbilities = getPokemonAbilities(5)
+tripAdvisorBlogPosts = getTripAdvisorBlogPosts(1)
 ```
 ```{r}
-pokemonAbilities
+tripAdvisorBlogPosts
 ```
 
 ## BBC Articles
@@ -296,7 +297,7 @@ getBBCArticls = function(minimumCount) {
 }
 ```
 
-### getTriviaFacts in depth
+### getBBCArticls in depth
 *getArticleURLsFromFeed* is a helper method get a list of news links from a single rss feed.  
 We download the xml file for the feed and parse it.  
 Once parsing is done, we extract from the document the value for <link> tags that are inside an <item> tag.
