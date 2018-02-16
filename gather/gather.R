@@ -6,6 +6,10 @@ if(!require(XML)) {
   install.packages('XML')
 }
 library(XML)
+if(!require(httr)) {
+  install.packages('httr')
+}
+library(httr)
 
 getWikipediaSummaries = function(minimumCount, startingTitle) {
   githubTitlesVector = c(startingTitle)
@@ -25,10 +29,14 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
     return(relatedTitles)
   }
   getWikipediaSummary = function(title) {
-    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
-    print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
-    summaryJSON = fromJSON(summaryAPIURL)
-    return(unlist(summaryJSON$extract))
+    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/html/", title)
+    print(paste0("Getting Wikipedia title html from: ", summaryAPIURL))
+    html = GET(summaryAPIURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, "//p", xmlValue)
+    plainText = gsub("\\[\\d+\\]", '', plainText)
+    plainText = paste(plainText, collapse = "\n")
+    return(c(plainText))
   }
   
   safeGetWikipediaSummary = function(title) {
@@ -40,10 +48,19 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
     return(result)
   }
   
+  safeGetRelatedWikipedia = function(title) {
+    result = tryCatch({
+      getRelatedTitlesToTitlesList(title)
+    }, error = function(e) {
+      c()
+    })
+    return(result)
+  }
+  
   while (length(githubTitlesVector) < minimumCount) {
     titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
     relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
-    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
+    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, safeGetRelatedWikipedia)))
     uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
     githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
   }
@@ -108,7 +125,4 @@ wikipediaSummaries = getWikipediaSummaries(100, "Swift_(programming_language)")
 pokemonAbilities = getPokemonAbilities(100)
 triviaFacts = getTriviaFacts(100)
 
-write.csv(wikipediaSummaries, "wikipediaSummaries.csv")
-write.csv(pokemonAbilities, "pokemonAbilities.csv")
-write.csv(triviaFacts, "triviaFacts.csv")
-
+write.csv(wikipediaSummaries, 'wikipediaSummaries.csv')

@@ -57,10 +57,14 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
     return(relatedTitles)
   }
   getWikipediaSummary = function(title) {
-    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
-    print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
-    summaryJSON = fromJSON(summaryAPIURL)
-    return(unlist(summaryJSON$extract))
+    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/html/", title)
+    print(paste0("Getting Wikipedia title html from: ", summaryAPIURL))
+    html = GET(summaryAPIURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, "//p", xmlValue)
+    plainText = gsub("\\[\\d+\\]", '', plainText)
+    plainText = paste(plainText, collapse = "\n")
+    return(c(plainText))
   }
   
   safeGetWikipediaSummary = function(title) {
@@ -72,10 +76,19 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
     return(result)
   }
   
+  safeGetRelatedWikipedia = function(title) {
+    result = tryCatch({
+      getRelatedTitlesToTitlesList(title)
+    }, error = function(e) {
+      c()
+    })
+    return(result)
+  }
+  
   while (length(githubTitlesVector) < minimumCount) {
     titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
     relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
-    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
+    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, safeGetRelatedWikipedia)))
     uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
     githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
   }
@@ -115,15 +128,20 @@ getRelatedTitlesToTitlesList = function(title) {
 }
 ```
 
-*getWikipediaSummary* is a helper method that gets a title and returns the summary for that title. It returns the value for the **extract** key in the json.  
+*getWikipediaSummary* is a helper method that gets a title and returns the summary for that title.  
+It downloads the html and then cleans it up by grabbing text in <p> tags and then removing annotations for citations (for example: "[12]")
 We wrap this method with *safeGetWikipediaSummary* because it could raise errors.
 ```{r, eval=FALSE}
-getWikipediaSummary = function(title) {
-  summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/summary/", title)
-  print(paste0("Getting Wikipedia title summary from: ", summaryAPIURL))
-  summaryJSON = fromJSON(summaryAPIURL)
-  return(unlist(summaryJSON$extract))
-}
+  getWikipediaSummary = function(title) {
+    summaryAPIURL = paste0("https://en.wikipedia.org/api/rest_v1/page/html/", title)
+    print(paste0("Getting Wikipedia title html from: ", summaryAPIURL))
+    html = GET(summaryAPIURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, "//p", xmlValue)
+    plainText = gsub("\\[\\d+\\]", '', plainText)
+    plainText = paste(plainText, collapse = "\n")
+    return(c(plainText))
+  }
 
 safeGetWikipediaSummary = function(title) {
   result = tryCatch({
