@@ -92,37 +92,35 @@ getPokemonAbilities = function(minimumCount) {
   return(pokemonAbilities)
 }
 
-
-getTriviaFacts = function(minimumCount) {
-  html2txt <- function(str) {
-    xpathApply(htmlParse(str, asText=TRUE),
-               "//body//text()", 
-               xmlValue)[[1]] 
+getBBCArticls = function(minimumCount) {
+  getArticleURLsFromFeed = function(feedURL) {
+    print(paste0("Getting article URLs from feed from: ", feedURL))
+    rssFeed = GET("http://feeds.bbci.co.uk/news/world/africa/rss.xml")
+    doc = xmlParse(rssFeed, asText = TRUE)
+    articleURLs = xpathSApply(doc, "//item/link",xmlValue)
+    return(articleURLs)
+  }
+  getArticleContent = function(articleURL) {
+    print(paste0("Getting BBC html from: ", articleURL))
+    html = GET(articleURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, "//div[@class='story-body__inner']/p",xmlValue)
+    plainText = paste(plainText, collapse = "\n")
+    return(plainText)
   }
   
-  triviaFacts = c()
+  bbcRSSFeeds = c('http://feeds.bbci.co.uk/news/world/europe/rss.xml', 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', 'http://feeds.bbci.co.uk/news/video_and_audio/politics/rss.xml')
   
-  isUniqueFact = function(fact) {
-    return(fact %in% triviaFacts == FALSE)
-  }
+  bbcArticleURLs = unlist(lapply(bbcRSSFeeds, getArticleURLsFromFeed))
+  bbcArticleURLs = head(bbcArticleURLs, minimumCount)
+  bbcArticls = unlist(lapply(bbcArticleURLs, getArticleContent))
+  bbcArticls = Filter(function(article) { return(nchar(article) > 700) }, bbcArticls)
   
-  while (length(triviaFacts) < minimumCount) {
-    pageSize = min(50, minimumCount)
-    pageSizeQueryParam = paste0("&amount=", toString(pageSize))
-    apiURL = paste0("https://opentdb.com/api.php?difficulty=hard&type=boolean", pageSizeQueryParam)
-    print(paste0("Getting facts from: ", apiURL))
-    triviaQuestions = fromJSON(apiURL)$results
-    triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]$question
-    uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
-    triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
-  }
-  
-  triviaFacts = unlist(lapply(triviaFacts, html2txt))
-  return(triviaFacts)
+  return(bbcArticls)
 }
-
 wikipediaSummaries = getWikipediaSummaries(100, "Swift_(programming_language)")  
 pokemonAbilities = getPokemonAbilities(100)
-triviaFacts = getTriviaFacts(100)
+bbcArticls = getBBCArticls()
 
 write.csv(wikipediaSummaries, 'wikipediaSummaries.csv')
+write.csv(bbcArticls, 'bbcArticls.csv')

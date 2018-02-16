@@ -23,6 +23,10 @@ if(!require(XML)) {
   install.packages('XML')
 }
 library(XML)
+if(!require(httr)) {
+  install.packages('httr')
+}
+library(httr)
 ```
 
 # Gathering Data
@@ -257,90 +261,84 @@ pokemonAbilities = getPokemonAbilities(5)
 pokemonAbilities
 ```
 
-## Trivia facts
-We use opentdb.com as a resource for trivia facts.  
-This is the only api that is random out of the three. To get the number of facts we need, we call the api again and again and gather unique facts until we reach the number.  
-Since this is a trivia questions db, we can get both true and false facts so we filter them after getting them from the server so we only save the facts with a "true" correct answer.  
-Documentation for the API can be found here: [Open Trivia DB API](https://opentdb.com/api_config.php)  
-For getting data, we have the method called **getTriviaFacts** which takes one parameter:
+## BBC Articles
+We use BBC news as another resource. We gather articles links from bbc rss feeds and then get the article content from those links using the article html.
+For getting data, we have the method called **getBBCArticls**. Takes one parameter:
 
-1. **minimumCount** - The minimum number of facts we need.
+1. **minimumCount** - The minimum number of ability summeries we need.
 
 ```{r}
-getTriviaFacts = function(minimumCount) {
-  html2txt <- function(str) {
-    xpathApply(htmlParse(str, asText=TRUE),
-               "//body//text()", 
-               xmlValue)[[1]] 
+getBBCArticls = function(minimumCount) {
+  getArticleURLsFromFeed = function(feedURL) {
+    print(paste0("Getting article URLs from feed from: ", feedURL))
+    rssFeed = GET(feedURL)
+    doc = xmlParse(rssFeed, asText = TRUE)
+    articleURLs = xpathSApply(doc, "//item/link",xmlValue)
+    return(articleURLs)
+  }
+  getArticleContent = function(articleURL) {
+    print(paste0("Getting BBC html from: ", articleURL))
+    html = GET(articleURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, "//div[@class='story-body__inner']/p",xmlValue)
+    plainText = paste(plainText, collapse = "\n")
+    return(plainText)
   }
   
-  triviaFacts = c()
+  bbcRSSFeeds = c('http://feeds.bbci.co.uk/news/world/europe/rss.xml', 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', 'http://feeds.bbci.co.uk/news/video_and_audio/politics/rss.xml')
   
-  isUniqueFact = function(fact) {
-    return(fact %in% triviaFacts == FALSE)
-  }
+  bbcArticleURLs = unlist(lapply(bbcRSSFeeds, getArticleURLsFromFeed))
+  bbcArticleURLs = head(bbcArticleURLs, minimumCount)
+  bbcArticls = unlist(lapply(bbcArticleURLs, getArticleContent))
+  bbcArticls = Filter(function(article) { return(nchar(article) > 700) }, bbcArticls)
   
-  while (length(triviaFacts) < minimumCount) {
-    pageSize = min(50, minimumCount)
-    pageSizeQueryParam = paste0("&amount=", toString(pageSize))
-    apiURL = paste0("https://opentdb.com/api.php?difficulty=hard&type=boolean", pageSizeQueryParam)
-    print(paste0("Getting facts from: ", apiURL))
-    triviaQuestions = fromJSON(apiURL)$results
-    triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]$question
-    uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
-    triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
-  }
-  
-  triviaFacts = unlist(lapply(triviaFacts, html2txt))
-  return(triviaFacts)
+  return(bbcArticls)
 }
 ```
 
 ### getTriviaFacts in depth
-*html2txt* is a helper method to decode HTML encoding which is the encoding for the questions in this api.
+*getArticleURLsFromFeed* is a helper method get a list of news links from a single rss feed.  
+We download the xml file for the feed and parse it.  
+Once parsing is done, we extract from the document the value for <link> tags that are inside an <item> tag.
 ```{r, eval=FALSE}
-html2txt <- function(str) {
-  xpathApply(htmlParse(str, asText=TRUE),
-             "//body//text()", 
-             xmlValue)[[1]] 
+getArticleURLsFromFeed = function(feedURL) {
+  print(paste0("Getting article URLs from feed from: ", feedURL))
+  rssFeed = GET(feedURL)
+  doc = xmlParse(rssFeed, asText = TRUE)
+  articleURLs = xpathSApply(doc, "//item/link",xmlValue)
+  return(articleURLs)
 }
 ```
 
-*triviaFacts* is the vector in which we store fetched facts. To make sure that we don't store the same fact twice since this is a random api, we have the *isUniqueFact* helper method.
+*getArticleContent* is a helper method that takes a bbc article url as the parameter and returns the article contents.  
+It first downloads the html and parses it.  
+We later extract the contents of each <div> that has the 'story-body__inner' class.  
 ```{r, eval=FALSE}
-triviaFacts = c()
-
-isUniqueFact = function(fact) {
-  return(fact %in% triviaFacts == FALSE)
+getArticleContent = function(articleURL) {
+  print(paste0("Getting BBC html from: ", articleURL))
+  html = GET(articleURL)
+  document = htmlParse(html, asText=TRUE)
+  plainText = xpathSApply(document, "//div[@class='story-body__inner']/p",xmlValue)
+  plainText = paste(plainText, collapse = "\n")
+  return(plainText)
 }
 ```
 
-The main while loop runs until we have enough facts.  
-It first fetches questions and answers with only boolean answers from the api. After that, it filters the questions with a "True" result which is considered as a fact from now on.  
-After that, the answers are filtered to make sure that we only have unique facts and appened to *triviaFacts*
+*bbcRSSFeeds* is the list of feeds that we want to download from.  
+We apply *getArticleURLsFromFeed* on this list and then for each url that is return we apply *getArticleContent*.  
+We filter articles that have less than 700 chars.
 ```{r, eval=FALSE}
-while (length(triviaFacts) < minimumCount) {
-  pageSize = min(50, minimumCount)
-  pageSizeQueryParam = paste0("&amount=", toString(pageSize))
-  apiURL = paste0("https://opentdb.com/api.php?difficulty=hard&type=boolean", pageSizeQueryParam)
-  print(paste0("Getting facts from: ", apiURL))
-  triviaQuestions = fromJSON(apiURL)$results
-  triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == "True", ]$question
-  uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
-  triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
-}
-```
-
-The facts are decoded using *html2txt* and returned.
-```{r, eval=FALSE}
-triviaFacts = unlist(lapply(triviaFacts, html2txt))
-return(triviaFacts)
+  bbcRSSFeeds = c('http://feeds.bbci.co.uk/news/world/europe/rss.xml', 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', 'http://feeds.bbci.co.uk/news/video_and_audio/politics/rss.xml')
+  
+  bbcArticleURLs = unlist(lapply(bbcRSSFeeds, getArticleURLsFromFeed))
+  bbcArticls = unlist(lapply(bbcArticleURLs, getArticleContent))
+  bbcArticls = Filter(function(article) { return(nchar(article) > 700) }, bbcArticls)
 ```
 
 ### Example use:
 ```{r results='hide', message=FALSE, warning=FALSE}
-triviaFacts = getTriviaFacts(5)
+bbcArticls = getBBCArticls(1)
 ```
 ```{r}
-triviaFacts
+bbcArticls
 ```

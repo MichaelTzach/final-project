@@ -121,7 +121,6 @@ $(document).ready(function () {
 
 </div>
 
-
 <p>Import the needed libraries</p>
 <pre class="r"><code>if(!require(jsonlite)) {
   install.packages('jsonlite')
@@ -132,7 +131,12 @@ if(!require(XML)) {
   install.packages('XML')
 }</code></pre>
 <pre><code>## Loading required package: XML</code></pre>
-<pre class="r"><code>library(XML)</code></pre>
+<pre class="r"><code>library(XML)
+if(!require(httr)) {
+  install.packages('httr')
+}</code></pre>
+<pre><code>## Loading required package: httr</code></pre>
+<pre class="r"><code>library(httr)</code></pre>
 <div id="gathering-data" class="section level1">
 <h1>Gathering Data</h1>
 <p>We want to gather text data from different resources. We prefer gathering the data using APIs instead of using web scrapping to have consistency in the data produced. Some of the APIs have random results. Some have constant results.</p>
@@ -163,10 +167,14 @@ For getting data from Wikipedia, we have the method called <strong>getWikipediaS
     return(relatedTitles)
   }
   getWikipediaSummary = function(title) {
-    summaryAPIURL = paste0(&quot;https://en.wikipedia.org/api/rest_v1/page/summary/&quot;, title)
-    print(paste0(&quot;Getting Wikipedia title summary from: &quot;, summaryAPIURL))
-    summaryJSON = fromJSON(summaryAPIURL)
-    return(unlist(summaryJSON$extract))
+    summaryAPIURL = paste0(&quot;https://en.wikipedia.org/api/rest_v1/page/html/&quot;, title)
+    print(paste0(&quot;Getting Wikipedia title html from: &quot;, summaryAPIURL))
+    html = GET(summaryAPIURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, &quot;//p&quot;, xmlValue)
+    plainText = gsub(&quot;\\[\\d+\\]&quot;, '', plainText)
+    plainText = paste(plainText, collapse = &quot;\n&quot;)
+    return(c(plainText))
   }
   
   safeGetWikipediaSummary = function(title) {
@@ -178,10 +186,19 @@ For getting data from Wikipedia, we have the method called <strong>getWikipediaS
     return(result)
   }
   
+  safeGetRelatedWikipedia = function(title) {
+    result = tryCatch({
+      getRelatedTitlesToTitlesList(title)
+    }, error = function(e) {
+      c()
+    })
+    return(result)
+  }
+  
   while (length(githubTitlesVector) &lt; minimumCount) {
     titlesDidntSearchRelatedFor = Filter(didNotGetRelatedTitlesForTitle, githubTitlesVector)
     relatedSitesAlreadyQueried = append(relatedSitesAlreadyQueried, titlesDidntSearchRelatedFor)
-    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, getRelatedTitlesToTitlesList)))
+    relatedTitles = unique(unlist(lapply(titlesDidntSearchRelatedFor, safeGetRelatedWikipedia)))
     uniqueRelatedTitles = Filter(isUniqueTitle, relatedTitles)
     githubTitlesVector = append(githubTitlesVector, uniqueRelatedTitles)
   }
@@ -210,14 +227,20 @@ didNotGetRelatedTitlesForTitle = function(title) {
   relatedTitles = fromJSON(relatedSitesAPIURL)$pages$title
   return(relatedTitles)
 }</code></pre>
-<p><em>getWikipediaSummary</em> is a helper method that gets a title and returns the summary for that title. It returns the value for the <strong>extract</strong> key in the json.<br />
-We wrap this method with <em>safeGetWikipediaSummary</em> because it could raise errors.</p>
-<pre class="r"><code>getWikipediaSummary = function(title) {
-  summaryAPIURL = paste0(&quot;https://en.wikipedia.org/api/rest_v1/page/summary/&quot;, title)
-  print(paste0(&quot;Getting Wikipedia title summary from: &quot;, summaryAPIURL))
-  summaryJSON = fromJSON(summaryAPIURL)
-  return(unlist(summaryJSON$extract))
-}
+<em>getWikipediaSummary</em> is a helper method that gets a title and returns the summary for that title.<br />
+It downloads the html and then cleans it up by grabbing text in
+<p>
+<p>tags and then removing annotations for citations (for example: “[12]”) We wrap this method with <em>safeGetWikipediaSummary</em> because it could raise errors.</p>
+<pre class="r"><code>  getWikipediaSummary = function(title) {
+    summaryAPIURL = paste0(&quot;https://en.wikipedia.org/api/rest_v1/page/html/&quot;, title)
+    print(paste0(&quot;Getting Wikipedia title html from: &quot;, summaryAPIURL))
+    html = GET(summaryAPIURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, &quot;//p&quot;, xmlValue)
+    plainText = gsub(&quot;\\[\\d+\\]&quot;, '', plainText)
+    plainText = paste(plainText, collapse = &quot;\n&quot;)
+    return(c(plainText))
+  }
 
 safeGetWikipediaSummary = function(title) {
   result = tryCatch({
@@ -246,7 +269,7 @@ This while loop finished when we have at least <em>minimumCount</em> titles in <
 <h3>Example use:</h3>
 <pre class="r"><code>wikipediaSummaries = getWikipediaSummaries(1, &quot;Swift_(programming_language)&quot;)  </code></pre>
 <pre class="r"><code>wikipediaSummaries</code></pre>
-<pre><code>## [1] &quot;Swift is a general-purpose, multi-paradigm, compiled programming language developed by Apple Inc. for iOS, macOS, watchOS, tvOS, and Linux. Swift is designed to work with Apple's Cocoa and Cocoa Touch frameworks and the large body of existing Objective-C (ObjC) code written for Apple products. It is built with the open source LLVM compiler framework and has been included in Xcode since version 6. On platforms other than Linux, it uses the Objective-C runtime library which allows C, Objective-C, C++ and Swift code to run within one program.\nApple intended Swift to support many core concepts associated with Objective-C, notably dynamic dispatch, widespread late binding, extensible programming and similar features, but \&quot;safer\&quot; (easier to catch software bugs); Swift has features addressing some common programming errors like null pointers and provides syntactic sugar to help avoid the pyramid of doom.&quot;</code></pre>
+<pre><code>## [1] &quot;\nSwift is a general-purpose, multi-paradigm, compiled programming language developed by Apple Inc. for iOS, macOS, watchOS, tvOS, and Linux. Swift is designed to work with Apple's Cocoa and Cocoa Touch frameworks and the large body of existing Objective-C (ObjC) code written for Apple products. It is built with the open source LLVM compiler framework and has been included in Xcode since version 6. On platforms other than Linux, it uses the Objective-C runtime library which allows C, Objective-C, C++ and Swift code to run within one program.\nApple intended Swift to support many core concepts associated with Objective-C, notably dynamic dispatch, widespread late binding, extensible programming and similar features, but \&quot;safer\&quot; (easier to catch software bugs); Swift has features addressing some common programming errors like null pointers and provides syntactic sugar to help avoid the pyramid of doom. Swift supports the concept of protocol extensibility, an extensibility system that can be applied to types, structs and classes, which Apple promotes as a real change in programming paradigms they term \&quot;protocol-oriented programming\&quot; (similar to traits).\nSwift was introduced at Apple's 2014 Worldwide Developers Conference (WWDC). It underwent an upgrade to version 1.2 during 2014 and a more major upgrade to Swift 2 at WWDC 2015. Initially a proprietary language, version 2.2 was made open-source software under the Apache License 2.0 on December 3, 2015, for Apple's platforms and Linux.\nIn March 2017, Swift made the top 10 in the monthly TIOBE index ranking of popular programming languages, and was ranked 11th at the end of 2017.\nDevelopment of Swift started in July 2010 by Chris Lattner, with the eventual collaboration of many other programmers at Apple. Swift took language ideas \&quot;from Objective-C, Rust, Haskell, Ruby, Python, C#, CLU, and far too many others to list\&quot;. On June 2, 2014, the Apple Worldwide Developers Conference (WWDC) application became the first publicly released app written in Swift. A beta version of the programming language was released to registered Apple developers at the conference, but the company did not promise that the final version of Swift would be source code compatible with the test version. Apple planned to make source code converters available if needed for the full release.\nThe Swift Programming Language, a free 500-page manual, was also released at WWDC, and is available on the iBooks Store and the official website.\nSwift reached the 1.0 milestone on September 9, 2014, with the Gold Master of Xcode 6.0 for iOS. Swift 1.1 was released on October 22, 2014, alongside the launch of Xcode 6.1. Swift 1.2 was released on April 8, 2015, along with Xcode 6.3. Swift 2.0 was announced at WWDC 2015, and was made available for publishing apps in the App Store in September 21, 2015. Swift 3.0 was released on September 13, 2016.\nSwift won first place for Most Loved Programming Language in the Stack Overflow Developer Survey 2015 and second place in 2016.\nIn December 2015, IBM announced its Swift Sandbox website, which allows developers to write Swift code in one pane and display output in another.\nDuring the WWDC 2016, Apple announced an iPad exclusive app, named Swift Playgrounds, intended to teach people how to code in Swift. The app is presented in a 3D video game-like interface which provides feedback when lines of code are placed in a certain order and executed.\nIn January 2017, Chris Lattner announced his departure from Apple for a new position with Tesla Motors, with the Swift project lead role going to team veteran Ted Kremenek.\nSwift is an alternative to the Objective-C language that employs modern programming-language theory concepts and strives to present a simpler syntax. During its introduction, it was described simply as \&quot;Objective-C without the C\&quot;.\nBy default, Swift does not expose pointers and other unsafe accessors, in contrast to Objective-C, which uses pointers pervasively to refer to object instances. Also, Objective-C's use of a Smalltalk-like syntax for making method calls has been replaced with a dot-notation style and namespace system more familiar to programmers from other common object-oriented (OO) languages like Java or C#. Swift introduces true named parameters and retains key Objective-C concepts, including protocols, closures and categories, often replacing former syntax with cleaner versions and allowing these concepts to be applied to other language structures, like enumerated types (enums)\nUnder the Cocoa and Cocoa Touch environments, many common classes were part of the Foundation Kit library. This included the NSString string library (using Unicode), the NSArray and NSDictionary collection classes, and others. Objective-C provided various bits of syntactic sugar to allow some of these objects to be created on-the-fly within the language, but once created, the objects were manipulated with object calls. For instance, in Objective-C concatenating two NSStrings required method calls similar to this: \n In Swift, many of these basic types have been promoted to the language's core, and can be manipulated directly. For instance, strings are invisibly bridged to NSString (when Foundation is imported) and can now be concatenated with the + operator, allowing greatly simplified syntax; the prior example becoming:\nSwift supports five access control levels for symbols: open, public, internal, fileprivate, and private. Unlike many object-oriented languages, these access controls ignore inheritance hierarchies: private indicates that a symbol is accessible only in the immediate scope, fileprivate indicates it is accessible only from within the file, internal indicates it is accessible within the containing module, public indicates it is accessible from any module, and open (only for classes and their methods) indicates that the class may be subclassed outside of the module.\nAn important new feature in Swift is option types, which allow references or values to operate in a manner similar to the common pattern in C, where a pointer may refer to a value or may be null. This implies that non-optional types cannot result in a null-pointer error; the compiler can ensure this is not possible.\nOptional types are created with the Optional mechanism—to make an Integer that is nullable, one would use a declaration similar to var optionalInteger: Optional&lt;Int&gt;. As in C#, Swift also includes syntactic sugar for this, allowing one to indicate a variable is optional by placing a question mark after the type name, var optionalInteger: Int?. Variables or constants that are marked optional either have a value of the underlying type or are nil. Optional types wrap the base type, resulting in a different instance. String and String? are fundamentally different types, the latter has more in common with Int? than String.\nTo access the value inside, assuming it is not nil, it must be unwrapped to expose the instance inside. This is performed with the ! operator:\nIn this case, the ! operator unwraps anOptionalInstance to expose the instance inside, allowing the method call to be made on it. If anOptionalInstance is nil, a null-pointer error occurs. This can be annoying in practice, so Swift also includes the concept of optional chaining to test whether the instance is nil and then unwrap it if it is non-null:\nIn this case the runtime only calls someMethod if anOptionalInstance is not nil, suppressing the error. Normally this requires the programmer to test whether myValue is nil before proceeding. The origin of the term chaining comes from the more common case where several method calls/getters are chained together. For instance:\ncan be reduced to:\nThe ? syntax circumvents the pyramid of doom.\nSwift 2 introduced the new keyword guard for cases in which code should stop executing if some condition is unmet:\nUsing guard has three benefits. While the syntax can act as an if statement, its primary benefit is inferring non-nullability. Where an if statement requires a case, guard assumes the case based on the condition provided. Also, since guard contains no scope, with exception of the else closure, leaseStart is presented as an unwrapped optional to the guard's super-scope. Lastly, if the guard statement's test fails, Swift requires the else to exit the current method or loop, ensuring leaseStart never is accessed when nil.  This is performed with the keywords return, continue, break, or throw.\nObjC was weakly typed, and allowed any method to be called on any object at any time. If the method call failed, there was a default handler in the runtime that returned nil. That meant that no unwrapping or testing was needed, the equivalent statement in ObjC:\nwould return nil and this could be tested. However, this also demanded that all method calls be dynamic, which introduces significant overhead. Swift's use of optionals provides a similar mechanism for testing and dealing with nils, but does so in a way that allows the compiler to use static dispatch because the unwrapping action is called on a defined instance (the wrapper), versus occurring in the runtime dispatch system.\nIn many object-oriented languages, objects are represented internally in two parts. The object is stored as a block of data placed on the heap, while the name (or \&quot;handle\&quot;) to that object is represented by a pointer. Objects are passed between methods by copying the value of the pointer, allowing the same underlying data on the heap to be accessed by anyone with a copy. In contrast, basic types like integers and floating point values are represented directly; the handle contains the data, not a pointer to it, and that data is passed directly to methods by copying. These styles of access are termed pass-by-reference in the case of objects, and pass-by-value for basic types.\nBoth concepts have their advantages and disadvantages. Objects are useful when the data is large, like the description of a window or the contents of a document. In these cases, access to that data is provided by copying a 32- or 64-bit value, versus copying an entire data structure. However, smaller values like integers are the same size as pointers (typically both are one word), so there is no advantage to passing a pointer, versus passing the value. Also, pass-by-reference inherently requires a dereferencing operation, which can produce noticeable overhead in some operations, typically those used with these basic value types, like mathematics.\nSimilarly to C# and in contrast to most other OO languages,[citation needed] Swift offers built-in support for objects using either pass-by-reference or pass-by-value semantics, the former using the class declaration and the latter using struct. Structs in Swift have almost all the same features as classes: methods, implementing protocols, and using the extension mechanisms. For this reason, Apple terms all data generically as instances, versus objects or values. Structs do not support inheritance, however.\nThe programmer is free to choose which semantics are more appropriate for each data structure in the application. Larger structures like windows would be defined as classes, allowing them to be passed around as pointers. Smaller structures, like a 2D point, can be defined as structs, which will be pass-by-value and allow direct access to their internal data with no dereference. The performance improvement inherent to the pass-by-value concept is such that Swift uses these types for almost all common data types, including Int and Double, and types normally represented by objects, like String and Array. Using value types can result in significant performance improvements in user applications also.\nTo ensure that even the largest structs do not cause a performance penalty when they are handed off, Swift uses copy on write so that the objects are copied only if and when the program attempts to change a value in them. This means that the various accessors have what is in effect a pointer to the same data storage, but this takes place far below the level of the language, in the computer's memory management unit (MMU). So while the data is physically stored as one instance in memory, at the level of the application, these values are separate, and physical separation is enforced by copy on write only if needed.\nA key feature of ObjC is its support for categories, methods that can be added to extend classes at runtime. Categories allow extending classes in-place to add new functions with no need to subclass or even have access to the original source code. An example might be to add spell checker support to the base NSString class, which means all instances of NSString in the application gain spell checking. The system is also widely used as an organizational technique, allowing related code to be gathered into library-like extensions. Swift continues to support this concept, although they are now termed extensions, and declared with the keyword extension. Unlike ObjC, Swift can also add new properties accessors, types and enums to extant instances.\nAnother key feature of ObjC is its use of protocols, known in most modern languages as interfaces. Protocols promise that a particular class implements a set of methods, meaning that other objects in the system can call those methods on any object supporting that protocol. This is often used in modern OO languages as a substitute for multiple inheritance, although the feature sets are not entirely similar. A common example of a protocol in Cocoa is the NSCopying protocol, which defines one method, copyWithZone, that implements deep copying on objects.\nIn ObjC, and most other languages implementing the protocol concept, it is up to the programmer to ensure that the required methods are implemented in each class. Swift adds the ability to add these methods using extensions, and to use generic programming (generics) to implement them. Combined, these allow protocols to be written once and support a wide variety of instances. Also, the extension mechanism can be used to add protocol conformance to an object that does not list that protocol in its definition.\nFor example, a protocol might be declared called SupportsToString, which ensures that instances that conform to the protocol implement a toString method that returns a String. In Swift, this can be declared with code like this:\nThis protocol can now be added to String, with no access to the base class's source:\nIn Swift, like many modern languages supporting interfaces, protocols can be used as types, which means variables and methods can be defined by protocol instead of their specific type:\nIt does not matter what sort of instance someSortOfPrintableObject is, the compiler will ensure that it conforms to the protocol and thus this code is safe. This syntax also means that collections can be based on protocols also, like let printableArray = [SupportsToString].\nAs Swift treats structs and classes as similar concepts, both extensions and protocols are extensively used in Swift's runtime to provide a rich API based on structs. For instance, Swift uses an extension to add the Equatable protocol to many of their basic types, like Strings and Arrays, allowing them to be compared with the == operator. A concrete example of how all of these features interact can be seen in the concept of default protocol implementations:\nThis function defines a method that works on any instance conforming to Equatable, providing a not equals function. Any instance, class or struct, automatically gains this implementation simply by conforming to Equatable. As many instances gain Equatable through their base implementations or other generic extensions, most basic objects in the runtime gain equals and not equals with no code.\nThis combination of protocols, defaults, protocol inheritance, and extensions allows many of the functions normally associated with classes and inheritance to be implemented on value types. Properly used, this can lead to dramatic performance improvements with no significant limits in API. This concept is so widely used within Swift, that Apple has begun calling it a protocol-oriented programming language. They suggest addressing many of the problem domains normally solved though classes and inheritance using protocols and structs instead.\nSwift uses the same runtime as the extant Objective-C system, but requires iOS 7 or macOS 10.9 or higher. Swift and Objective-C code can be used in one program, and by extension, C and C++ also. In contrast to C, C++ code cannot be used directly from Swift. An Objective-C or C wrapper must be created between Swift and C++. In the case of Objective-C, Swift has considerable access to the object model, and can be used to subclass, extend and use Objective-C code to provide protocol support. The converse is not true: a Swift class cannot be subclassed in Objective-C.\nTo aid development of such programs, and the re-use of extant code, Xcode 6 offers a semi-automated system that builds and maintains a bridging header to expose Objective-C code to Swift. This takes the form of an additional header file that simply defines or imports all of the Objective-C symbols that are needed by the project's Swift code. At that point, Swift can refer to the types, functions, and variables declared in those imports as though they were written in Swift. Objective-C code can also use Swift code directly, by importing an automatically maintained header file with Objective-C declarations of the project's Swift symbols. For instance, an Objective-C file in a mixed project called \&quot;MyApp\&quot; could access Swift classes or functions with the code #import \&quot;MyApp-Swift.h\&quot;. Not all symbols are available through this mechanism, however—use of Swift-specific features like generic types, non-object optional types, sophisticated enums, or even Unicode identifiers may render a symbol inaccessible from Objective-C.\nSwift also has limited support for attributes, metadata that is read by the development environment, and is not necessarily part of the compiled code. Like Objective-C, attributes use the @ syntax, but the currently available set is small. One example is the @IBOutlet attribute, which marks a given value in the code as an outlet, available for use within Interface Builder (IB). An outlet is a device that binds the value of the on-screen display to an object in code.\nSwift uses Automatic Reference Counting (ARC) to manage memory. Apple used to require manual memory management in Objective-C, but introduced ARC in 2011 to allow for easier memory allocation and deallocation. One problem with ARC is the possibility of creating a strong reference cycle, where objects reference each other in a way that you can reach the object you started from by following references (e.g. A references B, B references A). This causes them to become leaked into memory as they are never released.  Swift provides the keywords weak and unowned to prevent strong reference cycles. Typically a parent-child relationship would use a strong reference while a child-parent would use either weak reference, where parents and children can be unrelated, or unowned where a child always has a parent, but parent may not have a child. Weak references must be optional variables, since they can change and become nil.\nA closure within a class can also create a strong reference cycle by capturing self references. Self references to be treated as weak or unowned can be indicated using a capture list.\nA key element of the Swift system is its ability to be cleanly debugged and run within the development environment, using a read–eval–print loop (REPL), giving it interactive properties more in common with the scripting abilities of Python than traditional system programming languages. The REPL is further enhanced with the new concept playgrounds. These are interactive views running within the Xcode environment that respond to code or debugger changes on-the-fly. Playgrounds allow programmers to add in Swift code along with markdown documentation. If some code changes over time or with regard to some other ranged input value, the view can be used with the Timeline Assistant to demonstrate the output in an animated way. In addition, Xcode has debugging features for Swift development including breakpoints, step through and step over statements, as well as UI element placement breakdowns for app developers. \nApple says that Swift \&quot;is the first industrial-quality systems programming language that is as expressive and enjoyable as a scripting language\&quot;.\nMany of the features introduced with Swift also have well-known performance and safety trade-offs. Apple has implemented optimizations that reduce this overhead.\nSwift is similar to C in various ways:\nIt also has similarities to Objective-C:\nDifferences from Objective-C include:\nSince the language is open-source, there are prospects of it being ported to the web. Some web frameworks have already been developed, such as IBM's Kitura, Perfect and Vapor.\nAn official \&quot;Server APIs\&quot; work group has also been started by Apple, with members of the Swift developer community playing a central role.\nA second free implementation of Swift that targets Cocoa, Microsoft's Common Language Infrastructure (.NET), and the Java and Android platform exists as part of the Elements Compiler from RemObjects Software.&quot;</code></pre>
 </div>
 </div>
 <div id="pokemon-abilities" class="section level2">
@@ -309,90 +332,84 @@ If we requested a certain number of abilities and got less than that number, we 
 <h3>Example use:</h3>
 <pre class="r"><code>pokemonAbilities = getPokemonAbilities(5)</code></pre>
 <pre class="r"><code>pokemonAbilities</code></pre>
-<pre><code>## [1] &quot;As often as you like during your turn (before your attack), you may attach 1 Water Energy Card to 1 of your Water Pokémon. (This doesn't use up your 1 Energy card attachment for the turn.) This power can't be used if Blastoise is Asleep, Confused, or Paralyzed.&quot;    
-## [2] &quot;As often as you like during your turn (before your attack), you may take 1 Grass Energy card attached to 1 of your Pokémon and attach it to a different one. This power can't be used if Venusaur is Asleep, Confused, or Paralyzed.&quot;                                     
-## [3] &quot;Once during your turn (before your attack), you may flip a coin. If heads, and if your opponent has any Benched Pokémon, choose 1 of them and switch it with his or her Active Pokémon. This power can't be used if Erika's Victreebel is Asleep, Confused, or Paralyzed.&quot;
-## [4] &quot;All Energy cards attached to Erika's Oddish provide Grass Energy instead of their usual type. This power works even while Erika's Oddish is Asleep, Confused, or Paralyzed.&quot;                                                                                              
-## [5] &quot;Once during your turn (before your attack), you may remove 1 damage counter from Blaine's Vulpix. This power can't be used if Blaine's Vulpix is Asleep, Confused, or Paralyzed.&quot;</code></pre>
+<pre><code>## [1] &quot;When Dark Gyarados is Knocked Out by an attack, flip a coin. If heads, this power does 20 damage for each Water Energy attached to Dark Gyarados to the Pokémon that Knocked Out Dark Gyarados. Apply Weakness and Resistance. This power doesn't work if Dark Gyarados is Asleep, Confused, or Paralyzed.&quot;
+## [2] &quot;When you play Dark Slowbro from your hand, choose up to 3 Basic Pokémon and/or Evolution cards from your discard pile and put them into your hand.&quot;                                                                                                                                                        
+## [3] &quot;No Trainer cards can be played. This power stops working while Dark Vileplume is Asleep, Confused, or Paralyzed.&quot;                                                                                                                                                                                          
+## [4] &quot;When you play Dark Slowbro from your hand, choose up to 3 Basic Pokémon and/or Evolution cards from your discard pile and put them into your hand.&quot;                                                                                                                                                        
+## [5] &quot;No Trainer cards can be played. This power stops working while Dark Vileplume is Asleep, Confused, or Paralyzed.&quot;</code></pre>
 </div>
 </div>
-<div id="trivia-facts" class="section level2">
-<h2>Trivia facts</h2>
-<p>We use opentdb.com as a resource for trivia facts.<br />
-This is the only api that is random out of the three. To get the number of facts we need, we call the api again and again and gather unique facts until we reach the number.<br />
-Since this is a trivia questions db, we can get both true and false facts so we filter them after getting them from the server so we only save the facts with a “true” correct answer.<br />
-Documentation for the API can be found here: <a href="https://opentdb.com/api_config.php">Open Trivia DB API</a><br />
-For getting data, we have the method called <strong>getTriviaFacts</strong> which takes one parameter:</p>
+<div id="bbc-articles" class="section level2">
+<h2>BBC Articles</h2>
+<p>We use BBC news as another resource. We gather articles links from bbc rss feeds and then get the article content from those links using the article html. For getting data, we have the method called <strong>getBBCArticls</strong>. Takes one parameter:</p>
 <ol style="list-style-type: decimal">
-<li><strong>minimumCount</strong> - The minimum number of facts we need.</li>
+<li><strong>minimumCount</strong> - The minimum number of ability summeries we need.</li>
 </ol>
-<pre class="r"><code>getTriviaFacts = function(minimumCount) {
-  html2txt &lt;- function(str) {
-    xpathApply(htmlParse(str, asText=TRUE),
-               &quot;//body//text()&quot;, 
-               xmlValue)[[1]] 
+<pre class="r"><code>getBBCArticls = function(minimumCount) {
+  getArticleURLsFromFeed = function(feedURL) {
+    print(paste0(&quot;Getting article URLs from feed from: &quot;, feedURL))
+    rssFeed = GET(feedURL)
+    doc = xmlParse(rssFeed, asText = TRUE)
+    articleURLs = xpathSApply(doc, &quot;//item/link&quot;,xmlValue)
+    return(articleURLs)
+  }
+  getArticleContent = function(articleURL) {
+    print(paste0(&quot;Getting BBC html from: &quot;, articleURL))
+    html = GET(articleURL)
+    document = htmlParse(html, asText=TRUE)
+    plainText = xpathSApply(document, &quot;//div[@class='story-body__inner']/p&quot;,xmlValue)
+    plainText = paste(plainText, collapse = &quot;\n&quot;)
+    return(plainText)
   }
   
-  triviaFacts = c()
+  bbcRSSFeeds = c('http://feeds.bbci.co.uk/news/world/europe/rss.xml', 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', 'http://feeds.bbci.co.uk/news/video_and_audio/politics/rss.xml')
   
-  isUniqueFact = function(fact) {
-    return(fact %in% triviaFacts == FALSE)
-  }
+  bbcArticleURLs = unlist(lapply(bbcRSSFeeds, getArticleURLsFromFeed))
+  bbcArticleURLs = head(bbcArticleURLs, minimumCount)
+  bbcArticls = unlist(lapply(bbcArticleURLs, getArticleContent))
+  bbcArticls = Filter(function(article) { return(nchar(article) &gt; 700) }, bbcArticls)
   
-  while (length(triviaFacts) &lt; minimumCount) {
-    pageSize = min(50, minimumCount)
-    pageSizeQueryParam = paste0(&quot;&amp;amount=&quot;, toString(pageSize))
-    apiURL = paste0(&quot;https://opentdb.com/api.php?difficulty=hard&amp;type=boolean&quot;, pageSizeQueryParam)
-    print(paste0(&quot;Getting facts from: &quot;, apiURL))
-    triviaQuestions = fromJSON(apiURL)$results
-    triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == &quot;True&quot;, ]$question
-    uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
-    triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
-  }
-  
-  triviaFacts = unlist(lapply(triviaFacts, html2txt))
-  return(triviaFacts)
+  return(bbcArticls)
 }</code></pre>
 <div id="gettriviafacts-in-depth" class="section level3">
 <h3>getTriviaFacts in depth</h3>
-<p><em>html2txt</em> is a helper method to decode HTML encoding which is the encoding for the questions in this api.</p>
-<pre class="r"><code>html2txt &lt;- function(str) {
-  xpathApply(htmlParse(str, asText=TRUE),
-             &quot;//body//text()&quot;, 
-             xmlValue)[[1]] 
+<p><em>getArticleURLsFromFeed</em> is a helper method get a list of news links from a single rss feed.<br />
+We download the xml file for the feed and parse it.<br />
+Once parsing is done, we extract from the document the value for <link> tags that are inside an <item> tag.</p>
+<pre class="r"><code>getArticleURLsFromFeed = function(feedURL) {
+  print(paste0(&quot;Getting article URLs from feed from: &quot;, feedURL))
+  rssFeed = GET(feedURL)
+  doc = xmlParse(rssFeed, asText = TRUE)
+  articleURLs = xpathSApply(doc, &quot;//item/link&quot;,xmlValue)
+  return(articleURLs)
 }</code></pre>
-<p><em>triviaFacts</em> is the vector in which we store fetched facts. To make sure that we don’t store the same fact twice since this is a random api, we have the <em>isUniqueFact</em> helper method.</p>
-<pre class="r"><code>triviaFacts = c()
-
-isUniqueFact = function(fact) {
-  return(fact %in% triviaFacts == FALSE)
+<em>getArticleContent</em> is a helper method that takes a bbc article url as the parameter and returns the article contents.<br />
+It first downloads the html and parses it.<br />
+We later extract the contents of each
+<div>
+<p>that has the ’story-body__inner’ class.</p>
+<pre class="r"><code>getArticleContent = function(articleURL) {
+  print(paste0(&quot;Getting BBC html from: &quot;, articleURL))
+  html = GET(articleURL)
+  document = htmlParse(html, asText=TRUE)
+  plainText = xpathSApply(document, &quot;//div[@class='story-body__inner']/p&quot;,xmlValue)
+  plainText = paste(plainText, collapse = &quot;\n&quot;)
+  return(plainText)
 }</code></pre>
-<p>The main while loop runs until we have enough facts.<br />
-It first fetches questions and answers with only boolean answers from the api. After that, it filters the questions with a “True” result which is considered as a fact from now on.<br />
-After that, the answers are filtered to make sure that we only have unique facts and appened to <em>triviaFacts</em></p>
-<pre class="r"><code>while (length(triviaFacts) &lt; minimumCount) {
-  pageSize = min(50, minimumCount)
-  pageSizeQueryParam = paste0(&quot;&amp;amount=&quot;, toString(pageSize))
-  apiURL = paste0(&quot;https://opentdb.com/api.php?difficulty=hard&amp;type=boolean&quot;, pageSizeQueryParam)
-  print(paste0(&quot;Getting facts from: &quot;, apiURL))
-  triviaQuestions = fromJSON(apiURL)$results
-  triviaQuestionsWithCorrectAnswers = triviaQuestions[triviaQuestions$correct_answer == &quot;True&quot;, ]$question
-  uniqueAnswers = Filter(isUniqueFact, triviaQuestionsWithCorrectAnswers)
-  triviaFacts = append(triviaFacts, triviaQuestionsWithCorrectAnswers)  
-}</code></pre>
-<p>The facts are decoded using <em>html2txt</em> and returned.</p>
-<pre class="r"><code>triviaFacts = unlist(lapply(triviaFacts, html2txt))
-return(triviaFacts)</code></pre>
+<p><em>bbcRSSFeeds</em> is the list of feeds that we want to download from.<br />
+We apply <em>getArticleURLsFromFeed</em> on this list and then for each url that is return we apply <em>getArticleContent</em>.<br />
+We filter articles that have less than 700 chars.</p>
+<pre class="r"><code>  bbcRSSFeeds = c('http://feeds.bbci.co.uk/news/world/europe/rss.xml', 'http://feeds.bbci.co.uk/news/world/middle_east/rss.xml', 'http://feeds.bbci.co.uk/news/video_and_audio/politics/rss.xml')
+  
+  bbcArticleURLs = unlist(lapply(bbcRSSFeeds, getArticleURLsFromFeed))
+  bbcArticls = unlist(lapply(bbcArticleURLs, getArticleContent))
+  bbcArticls = Filter(function(article) { return(nchar(article) &gt; 700) }, bbcArticls)</code></pre>
 </div>
 <div id="example-use-2" class="section level3">
 <h3>Example use:</h3>
-<pre class="r"><code>triviaFacts = getTriviaFacts(5)</code></pre>
-<pre class="r"><code>triviaFacts</code></pre>
-<pre><code>## [1] &quot;The band STRFKR was also briefly known as Pyramiddd.&quot;                                                                    
-## [2] &quot;The Klingon home planet is Qo'noS.&quot;                                                                                      
-## [3] &quot;In Topology, the complement of an open set is a closed set.&quot;                                                             
-## [4] &quot;\&quot;Number 16 Bus Shelter\&quot; was a child's name that was approved by the New Zealand government.&quot;                           
-## [5] &quot;During the Winter War, the amount of Soviet Union soliders that died or went missing was five times more than Finland's.&quot;</code></pre>
+<pre class="r"><code>bbcArticls = getBBCArticls(1)</code></pre>
+<pre class="r"><code>bbcArticls</code></pre>
+<pre><code>## [1] &quot;A Turkish court has sentenced six journalists to life in jail for alleged links to the July 2016 coup plotters. \nThe judgement came as another Turkish court decided to release German-Turkish journalist Deniz Yucel, who has been held for a year without charge.\nThe six were found guilty of links to US-based Islamic preacher Fethullah Gulen, blamed over the failed coup.\nThe six are: Nazli Ilicak, Ahmet Altan, Mehmet Altan, Fevzi Yazici, Yakup Simsek and Sukru Tugrul Ozsengul.\nThe Istanbul court found them guilty of \&quot;attempting to abolish the order prescribed by the Turkish constitution or to bring in a new order\&quot;, Turkish media reported.\nThe Altan brothers - Ahmet and Mehmet - were accused of giving coded messages in a television talk show on the eve of the coup attempt. \nMilitary officers led a mutiny against President Recep Tayyip Erdogan which resulted in the deaths of 250 civilian protesters.\nRead more on the crackdown in Turkey:\nSince the abortive coup the Turkish authorities have jailed more than 50,000 people and dismissed more than 150,000 public servants, including journalists, teachers, police and justice officials.\nMehmet Altan, an economics professor and journalist, had won a constitutional court ruling in his favour - but it was overruled on Friday.\nSeparately, Die Welt journalist Deniz Yucel - who holds German-Turkish dual citizenship - was freed from jail on Friday. He had been accused of spreading propaganda.\nBy Mark Lowen, BBC Turkey Correspondent\nI watched last year as President Erdogan spoke of Deniz Yucel at a political rally. \&quot;They are hiding a terrorist, a spy, in the German embassy,\&quot; he bellowed, to roars of approval. \&quot;Merkel asked me to release him. I told her we have an independent judiciary. He'll pay for being a terrorist.\&quot; \nToday Deniz Yucel was released, after more pressure by the German chancellor. \&quot;It seems like some problems in our relations have disappeared,\&quot; the Turkish prime minister told reporters. Yet Turkey still claims judicial independence.\nWas there a deal for his release? We'll never know. But while the biggest impediment to improved Turkish-German ties has been removed, several more remain. \nA German human rights activist still faces trial here. Germany has repeatedly criticised the erosion of democracy in Turkey. And Turkey accuses Germany of harbouring terror supporters. The two countries need each other, but mistrust and bad blood run deep.\nThe Yucel case was an irritant in German-Turkish relations, and on Thursday Chancellor Angela Merkel had pressed for his release.\nMr Yucel, 44, was arrested in Istanbul a year ago and accused of writing propaganda in support of terrorism. \nTurkey labels separatist militants in the Kurdish community as \&quot;terrorists\&quot;. \nThe arrest came after Mr Yucel reported that the Turkish energy minister's email account had been hacked. &quot;</code></pre>
 </div>
 </div>
 </div>
