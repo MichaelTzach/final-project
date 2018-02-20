@@ -35,7 +35,9 @@ getWikipediaSummaries = function(minimumCount, startingTitle) {
     document = htmlParse(html, asText=TRUE)
     plainText = xpathSApply(document, "//p", xmlValue)
     plainText = gsub("\\[\\d+\\]", '', plainText)
-    plainText = paste(plainText, collapse = "\n")
+    plainText = gsub("[[:space:]]", ' ', plainText)
+    plainText = gsub("\"", '', plainText)
+    plainText = paste(plainText, collapse = "")
     return(c(plainText))
   }
   
@@ -105,7 +107,9 @@ getBBCArticls = function(minimumCount) {
     html = GET(articleURL)
     document = htmlParse(html, asText=TRUE)
     plainText = xpathSApply(document, "//div[@class='story-body__inner']/p",xmlValue)
-    plainText = paste(plainText, collapse = "\n")
+    plainText = gsub("[[:space:]]", ' ', plainText)
+    plainText = gsub("\"", '', plainText)
+    plainText = paste(plainText, collapse = "")
     return(plainText)
   }
   
@@ -132,7 +136,9 @@ getTripAdvisorBlogPosts = function(minimumCount) {
     html = GET(blogpostURL)
     document = htmlParse(html, asText = TRUE)
     plainText = xpathSApply(document, "//div[@class='ec__post-body']/p",xmlValue)
-    plainText = paste(plainText, collapse = "\n")
+    plainText = gsub("[[:space:]]", ' ', plainText)
+    plainText = gsub("\"", '', plainText)
+    plainText = paste(plainText, collapse = "")
     return(plainText)
   }
 
